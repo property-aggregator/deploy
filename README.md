@@ -54,8 +54,6 @@ docker compose up -d
 docker compose ps
 ```
 
-Repozytorium jest prywatne, więc `git clone` wymaga uwierzytelnienia, np. tym samym tokenem albo kluczem deploy.
-
 ## Aktualizacja
 
 ```bash
