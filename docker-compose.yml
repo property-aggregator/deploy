@@ -1,0 +1,160 @@
+# Production stack for a single VPS (Hetzner CPX22: 2 vCPU, 4 GB RAM).
+# Only Caddy is reachable from the internet; everything else lives on the internal network.
+#   docker compose up -d   (reads .env from this directory)
+
+name: property-aggregator
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-backend-env: &backend-env
+  ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+  AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+  AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+  CORS_ALLOWED_ORIGINS: ${APP_BASE_URL}
+  TERMS_VERSION: ${TERMS_VERSION}
+  MARKETING_CONSENT_VERSION: ${MARKETING_CONSENT_VERSION}
+  NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL}
+  NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT}
+
+services:
+  caddy:
+    image: caddy:2
+    <<: [*restart, *logging]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+
+  frontend:
+    image: ghcr.io/property-aggregator/frontend:${FRONTEND_TAG:-latest}
+    <<: [*restart, *logging]
+    environment:
+      API_BASE_URL: http://api:8080
+      APP_BASE_URL: ${APP_BASE_URL}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID}
+      AUTH0_CLIENT_SECRET: ${AUTH0_CLIENT_SECRET}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      AUTH0_SECRET: ${AUTH0_SECRET}
+    mem_limit: 512m
+    depends_on:
+      - api
+
+  api:
+    image: ghcr.io/property-aggregator/backend-api:${BACKEND_TAG:-latest}
+    <<: [*restart, *logging]
+    environment:
+      <<: *backend-env
+      ASPNETCORE_ENVIRONMENT: Production
+    mem_limit: 512m
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/property-aggregator/backend-worker:${BACKEND_TAG:-latest}
+    <<: [*restart, *logging]
+    environment:
+      <<: *backend-env
+      DOTNET_ENVIRONMENT: Production
+    mem_limit: 512m
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  # Applies pending EF Core migrations, then exits. api and worker start only after it succeeds.
+  migrations:
+    image: ghcr.io/property-aggregator/backend-migrations:${BACKEND_TAG:-latest}
+    <<: *logging
+    restart: "no"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  scraper:
+    image: ghcr.io/property-aggregator/scraper:${SCRAPER_TAG:-latest}
+    <<: [*restart, *logging]
+    command: ["python", "-m", "property_scraper.main", "scheduler"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_QUEUE: offers
+      RABBITMQ_EXCHANGE: property_scraper
+      REQUEST_DELAY: ${SCRAPER_REQUEST_DELAY:-3.0}
+      REQUEST_TIMEOUT: ${SCRAPER_REQUEST_TIMEOUT:-15}
+      FIRST_PAGE_INTERVAL: ${SCRAPER_FIRST_PAGE_INTERVAL:-10}
+      FULL_SCRAPE_TIME: ${SCRAPER_FULL_SCRAPE_TIME:-02:00}
+      TZ: Europe/Warsaw
+    mem_limit: 512m
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  postgres:
+    image: postgis/postgis:17-3.5
+    <<: [*restart, *logging]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "effective_cache_size=768MB", "-c", "max_connections=50"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1g
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    <<: [*restart, *logging]
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    # Management UI only on the server's loopback: open it through an SSH tunnel
+    #   ssh -L 15672:localhost:15672 deploy@<server-ip>
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  rabbitmq-data:

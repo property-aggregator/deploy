@@ -1,0 +1,18 @@
+{
+	email {$ACME_EMAIL}
+}
+
+kazdy-nieruch.pl {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+www.kazdy-nieruch.pl {
+	redir https://kazdy-nieruch.pl{uri} permanent
+}
+
+# The frontend calls the API server-side, so the API is not public yet.
+# Uncomment when the browser needs it directly (SignalR).
+# api.kazdy-nieruch.pl {
+# 	reverse_proxy api:8080
+# }
