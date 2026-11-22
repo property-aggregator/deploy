@@ -32,9 +32,9 @@ Internet ─► Caddy :443 (HTTPS) ─► frontend :3000 ─► api :8080 ─►
 
 Wymagania:
 
-* rekordy DNS `A` dla `kazdy-nieruch.pl`, `www` i `api` wskazują na IP serwera,
+* rekordy DNS `A` dla `lokalskan.pl`, `www` i `api` wskazują na IP serwera,
 * w GHCR są obrazy wszystkich usług z `docker-compose.yml`,
-* w Auth0 są dodane adresy `https://kazdy-nieruch.pl` (callback `/auth/callback`, logout, web origins).
+* w Auth0 są dodane adresy `https://lokalskan.pl` (callback `/auth/callback`, logout, web origins).
 
 Na serwerze (użytkownik `deploy`):
 
