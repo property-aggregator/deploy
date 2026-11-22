@@ -75,6 +75,13 @@ docker compose logs migrations         # wynik migracji
 docker compose restart scraper
 ```
 
+Panel RabbitMQ jest dostępny tylko przez tunel SSH:
+
+```bash
+ssh -L 15672:localhost:15672 deploy@<ip-serwera>
+# potem w przeglądarce: http://localhost:15672
+```
+
 ## Dostęp do bazy (DataGrip)
 
 PostgreSQL nasłuchuje tylko na `127.0.0.1:5432` serwera. W DataGrip: **SSH/SSL → Use SSH tunnel** (`deploy@<ip-serwera>`, klucz SSH), a w **General** host `localhost`, port `5432` i dane z `.env` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`). Przy edycji danych warto przełączyć transakcje na *Manual*.
