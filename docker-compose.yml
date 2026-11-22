@@ -98,7 +98,9 @@ services:
   scraper:
     image: ghcr.io/property-aggregator/scraper:${SCRAPER_TAG:-latest}
     <<: [*restart, *logging]
-    command: ["python", "-m", "property_scraper.main", "scheduler"]
+    # worker = scheduled scraping + answering the backend's expiration checks, one process
+    # (one shared request rate limit per portal)
+    command: ["python", "-m", "property_scraper.main", "worker"]
     environment:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: "5672"
@@ -107,10 +109,23 @@ services:
       RABBITMQ_QUEUE: offers
       RABBITMQ_EXCHANGE: property_scraper
       REQUEST_DELAY: ${SCRAPER_REQUEST_DELAY:-3.0}
+      REQUEST_JITTER: ${SCRAPER_REQUEST_JITTER:-3.0}
       REQUEST_TIMEOUT: ${SCRAPER_REQUEST_TIMEOUT:-15}
+      LONG_PAUSE_AFTER_MIN: ${SCRAPER_LONG_PAUSE_AFTER_MIN:-40}
+      LONG_PAUSE_AFTER_MAX: ${SCRAPER_LONG_PAUSE_AFTER_MAX:-80}
+      LONG_PAUSE_MIN: ${SCRAPER_LONG_PAUSE_MIN:-20}
+      LONG_PAUSE_MAX: ${SCRAPER_LONG_PAUSE_MAX:-60}
+      SOURCE_PAUSE_MIN: ${SCRAPER_SOURCE_PAUSE_MIN:-30}
+      SOURCE_PAUSE_MAX: ${SCRAPER_SOURCE_PAUSE_MAX:-90}
       FIRST_PAGE_INTERVAL: ${SCRAPER_FIRST_PAGE_INTERVAL:-10}
       FULL_SCRAPE_TIME: ${SCRAPER_FULL_SCRAPE_TIME:-02:00}
+      SOURCES_FILE: /app/scraper-config/sources.toml
       TZ: Europe/Warsaw
+    # Enable/disable sources by editing scraper/sources.toml; re-read on every job run, no restart.
+    # The directory is mounted, not the file: `git pull` and many editors replace the file, and a
+    # single-file mount would keep showing the old one until the container restarts.
+    volumes:
+      - ./scraper:/app/scraper-config:ro
     mem_limit: 512m
     depends_on:
       rabbitmq:
@@ -124,6 +139,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     command: ["postgres", "-c", "shared_buffers=256MB", "-c", "effective_cache_size=768MB", "-c", "max_connections=50"]
+    # Only on the server's loopback, for a DB client through an SSH tunnel (e.g. DataGrip).
+    # Never "5432:5432": Docker's iptables rules bypass UFW and the database would be public.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:

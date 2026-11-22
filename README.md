@@ -26,14 +26,15 @@ Internet ─► Caddy :443 (HTTPS) ─► frontend :3000 ─► api :8080 ─►
 | `Caddyfile` | Domeny, HTTPS, przekierowanie `www` |
 | `.env.example` | Szablon zmiennych. Prawdziwy `.env` istnieje **tylko na serwerze** i nie trafia do repozytorium |
 | `scripts/backup-db.sh` | Kopia bazy (`pg_dump`), 7 dni wstecz |
+| `scraper/sources.toml` | Źródła scrapera; montowane do kontenera, zmiany działają bez restartu |
 
 ## Pierwsze uruchomienie
 
 Wymagania:
 
-* rekordy DNS `A` dla `kazdy-nieruch.pl`, `www` i `api` wskazują na IP serwera,
+* rekordy DNS `A` dla `lokalskan.pl`, `www` i `api` wskazują na IP serwera,
 * w GHCR są obrazy wszystkich usług z `docker-compose.yml`,
-* w Auth0 są dodane adresy `https://kazdy-nieruch.pl` (callback `/auth/callback`, logout, web origins).
+* w Auth0 są dodane adresy `https://lokalskan.pl` (callback `/auth/callback`, logout, web origins).
 
 Na serwerze (użytkownik `deploy`):
 
@@ -79,6 +80,23 @@ Panel RabbitMQ jest dostępny tylko przez tunel SSH:
 ```bash
 ssh -L 15672:localhost:15672 deploy@<ip-serwera>
 # potem w przeglądarce: http://localhost:15672
+```
+
+## Dostęp do bazy (DataGrip)
+
+PostgreSQL nasłuchuje tylko na `127.0.0.1:5432` serwera. W DataGrip: **SSH/SSL → Use SSH tunnel** (`deploy@<ip-serwera>`, klucz SSH), a w **General** host `localhost`, port `5432` i dane z `.env` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`). Przy edycji danych warto przełączyć transakcje na *Manual*.
+
+Użytkownik tylko do odczytu do przeglądania danych:
+
+```bash
+. ./.env
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL
+CREATE ROLE readonly LOGIN PASSWORD '<haslo>';
+GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO readonly;
+GRANT USAGE ON SCHEMA public TO readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
+ALTER DEFAULT PRIVILEGES FOR ROLE "$POSTGRES_USER" IN SCHEMA public GRANT SELECT ON TABLES TO readonly;
+SQL
 ```
 
 ## Kopie zapasowe
