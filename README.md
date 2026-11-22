@@ -75,6 +75,23 @@ docker compose logs migrations         # wynik migracji
 docker compose restart scraper
 ```
 
+## Dostęp do bazy (DataGrip)
+
+PostgreSQL nasłuchuje tylko na `127.0.0.1:5432` serwera. W DataGrip: **SSH/SSL → Use SSH tunnel** (`deploy@<ip-serwera>`, klucz SSH), a w **General** host `localhost`, port `5432` i dane z `.env` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`). Przy edycji danych warto przełączyć transakcje na *Manual*.
+
+Użytkownik tylko do odczytu do przeglądania danych:
+
+```bash
+. ./.env
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL
+CREATE ROLE readonly LOGIN PASSWORD '<haslo>';
+GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO readonly;
+GRANT USAGE ON SCHEMA public TO readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
+ALTER DEFAULT PRIVILEGES FOR ROLE "$POSTGRES_USER" IN SCHEMA public GRANT SELECT ON TABLES TO readonly;
+SQL
+```
+
 ## Kopie zapasowe
 
 ```bash
