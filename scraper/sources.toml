@@ -1,0 +1,33 @@
+# Searches the scraper runs (this directory is mounted into the scraper container as /app/scraper-config).
+# The file is re-read on every job run: set `enabled = false` to skip a source from the next
+# run on, no restart needed. A job that is already running is not stopped.
+# Supported combinations: see the scraper repo, portals/<portal>/urls.py; an invalid file keeps
+# the previous valid version in use and logs an error.
+
+[[sources]]
+portal = "otodom"
+transaction = "sale"
+property_type = "apartment"
+market = "secondary"
+enabled = true
+
+[[sources]]
+portal = "otodom"
+transaction = "sale"
+property_type = "apartment"
+market = "primary"
+enabled = true
+
+[[sources]]
+portal = "olx"
+transaction = "sale"
+property_type = "apartment"
+market = "secondary"
+enabled = true
+
+[[sources]]
+portal = "olx"
+transaction = "sale"
+property_type = "apartment"
+market = "primary"
+enabled = true
