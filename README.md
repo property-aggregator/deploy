@@ -75,30 +75,6 @@ docker compose logs migrations         # wynik migracji
 docker compose restart scraper
 ```
 
-## Scraper
-
-Scraper działa w trybie `worker`: harmonogram scrapowania i odpowiedzi na prośby backendu o sprawdzenie, czy oferta jest nadal aktywna.
-
-Źródła (portal, rynek, typ nieruchomości) są w `scraper/sources.toml`. Plik jest wczytywany przy każdym przebiegu, więc wyłączenie źródła nie wymaga restartu:
-
-```bash
-nano scraper/sources.toml        # enabled = false przy źródle
-docker compose logs -f scraper   # przy następnym przebiegu: "first-page: <lista włączonych źródeł>"
-```
-
-* Zmiana działa od najbliższego przebiegu (`first-page` co `SCRAPER_FIRST_PAGE_INTERVAL` minut, pełny scrap o `SCRAPER_FULL_SCRAPE_TIME`). Przebieg, który już trwa, nie jest przerywany.
-* Przy błędzie w pliku scraper zostaje przy ostatniej poprawnej wersji i zapisuje błąd w logu.
-* Zmiany wprowadzone bezpośrednio na serwerze warto przenieść do repozytorium, inaczej następny `git pull` może je nadpisać lub zgłosić konflikt.
-
-Zmiana ustawień w `.env` (np. `SCRAPER_FULL_SCRAPE_TIME`) wymaga `docker compose up -d scraper`; `docker compose restart` nie wczytuje nowych wartości. Restart przerywa trwający pełny scrap (następny ruszy o `SCRAPER_FULL_SCRAPE_TIME`), więc lepiej nie robić go w nocy.
-
-Panel RabbitMQ jest dostępny tylko przez tunel SSH:
-
-```bash
-ssh -L 15672:localhost:15672 deploy@<ip-serwera>
-# potem w przeglądarce: http://localhost:15672
-```
-
 ## Kopie zapasowe
 
 ```bash
